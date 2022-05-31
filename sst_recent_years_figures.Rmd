@@ -1,0 +1,120 @@
+---
+title: "2022 sst versus 2014-2017"
+author: "Matt Callahan"
+date: "5/31/2022"
+output: html_document
+---
+## Background
+The AKFIN ESR region sst web service serves daily sst aggregated for alaska marine Ecosystem Status Report subregions. These sst values and associated heatwave status are presented in a shiny app https://shinyfin.psmfc.org/ak-sst-mhw/. We recently were asked how current temperature trends compare to previous heatwave years. While the shiny app offers no predictive power, AKFIN does have regional sst time series for those years, and I thought it would be interesting to compare.
+
+## Data
+I start by downloading the entire ESR time series from the web service then separate out by region.
+```{r, message=FALSE, warning=FALSE}
+#load packages
+library(httr)
+library(tidyverse)
+library(lubridate)
+#download entire time series for all regions
+sst<-httr::content(httr::GET('https://apex.psmfc.org/akfin/data_marts/akmp/ecosystem_sub_crw_avg_sst?start_date=19850101&end_date=20501130'), type = "application/json") %>%
+  bind_rows %>% 
+  mutate(date=as_date(READ_DATE),
+         day=day(date),
+         month=month(date),
+          year=year(date),
+         #  Create a dummy date so that each year can more easily be overlain
+         newdate=as.Date(ifelse(month==12,as.character(as.Date(paste("1999",month,day,sep="-"),format="%Y-%m-%d")),
+ as.character(as.Date(paste("2000",month,day,sep="-"),format="%Y-%m-%d"))),format("%Y-%m-%d")),
+          year2=ifelse(month==12,year+1,year)) %>% # To have our years go from Dec-Nov, force December to be part of the subsequent year.
+    arrange(date) %>% 
+  data.frame %>% 
+  dplyr::select(newdate, date, day, year, year2, meansst=MEANSST, esr_region=ECOSYSTEM_SUB)
+
+
+#filter regions
+aisst<-sst%>%filter(grepl("Aleutians", esr_region))
+goasst<-sst%>%filter(grepl("Gulf", esr_region))
+bssst<-sst%>%filter(grepl("Bering", esr_region))
+```
+
+
+
+## Figures
+Next I plot figures using similar code to the SST shiny app. 
+
+*Aleutians*
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=20}
+ggplot() +
+      geom_line(data=aisst, # Older years are grey lines.
+                aes(newdate,meansst,group=factor(year2)),col="gray") +
+      geom_line(data=aisst %>% filter(year2%in% c(2014, 2015, 2016, 2017, 2022)), 
+                aes(newdate,meansst,color=factor(year2)), size=1) +
+      geom_line(data=aisst %>% 
+                  filter(year2%in%1986:2015) %>% # The mean from 1986-2015
+                  group_by(esr_region,newdate) %>% 
+                  summarise(meantemp=mean(meansst,na.rm=TRUE)),
+                aes(newdate,meantemp),col='black', size=1) +
+      facet_wrap(~esr_region,ncol=1) +
+    scale_y_continuous(breaks=c(0,5,10))+
+      ylab("Sea Surface Temperature (°C)") + 
+      xlab("") +
+      scale_x_date(date_breaks="1 month",
+                   date_labels = "%b",
+                   expand = c(0.025,0.025))  +
+  theme(legend.title=element_blank(),
+        strip.text = element_text(color="white",family="sans",face="bold"),
+            strip.background = element_rect(fill="dark blue"))
+```
+
+*Bering Sea*
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=13}
+ggplot() +
+      geom_line(data=bssst, # Older years are grey lines.
+                aes(newdate,meansst,group=factor(year2)),col="gray") +
+      geom_line(data=bssst %>% filter(year2%in% c(2014, 2015, 2016, 2017, 2022)), 
+                aes(newdate,meansst,color=factor(year2)), size=1) +
+      geom_line(data=bssst %>% 
+                  filter(year2%in%1986:2015) %>% # The mean from 1986-2015
+                  group_by(esr_region,newdate) %>% 
+                  summarise(meantemp=mean(meansst,na.rm=TRUE)),
+                aes(newdate,meantemp),col='black', size=1) +
+      facet_wrap(~esr_region,ncol=1) +
+    scale_y_continuous(breaks=c(0,5,10))+
+      ylab("Sea Surface Temperature (°C)") + 
+      xlab("") +
+      scale_x_date(date_breaks="1 month",
+                   date_labels = "%b",
+                   expand = c(0.025,0.025))  +
+  theme(legend.title=element_blank(),
+        strip.text = element_text(color="white",family="sans",face="bold"),
+            strip.background = element_rect(fill="dark blue"))
+```
+
+*Gulf of Alaska*
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=13}
+ggplot() +
+      geom_line(data=goasst, # Older years are grey lines.
+                aes(newdate,meansst,group=factor(year2)),col="gray") +
+      geom_line(data=goasst %>% filter(year2%in% c(2014, 2015, 2016, 2017, 2022)), 
+                aes(newdate,meansst,color=factor(year2)), size=1) +
+      geom_line(data=goasst %>% 
+                  filter(year2%in%1986:2015) %>% # The mean from 1986-2015
+                  group_by(esr_region,newdate) %>% 
+                  summarise(meantemp=mean(meansst,na.rm=TRUE)),
+                aes(newdate,meantemp),col='black', size=1) +
+      facet_wrap(~esr_region,ncol=1) +
+    scale_y_continuous(breaks=c(0,5,10))+
+      ylab("Sea Surface Temperature (°C)") + 
+      xlab("") +
+      scale_x_date(date_breaks="1 month",
+                   date_labels = "%b",
+                   expand = c(0.025,0.025))  +
+  theme(legend.title=element_blank(),
+        strip.text = element_text(color="white",family="sans",face="bold"),
+            strip.background = element_rect(fill="dark blue"))
+```
+
+## Quick summary
+Aleutian SST is currently as high or higher than it was during 2014-2017. 
+SST in the NBS is similar to the warm 2016 and 2017 while SEBS SST is similar to 2014, 2015, and 2017 but far below the exceptionally warm 2016.
+GOA temperatures are on the lower end of those seen in the warm blob years and again, much colder than 2016. 
+The difference in winter temperatures between 2014-2017 and 2022 is more striking. In the GOA and SEBS winter temperatures were colder in 2022, NBS temperatures were similar (ice covered), and the 2022 winter SST in the Aleutians was warmer than during the warm blob period. 
